@@ -13,39 +13,72 @@
     canvas { border: 1px solid #ccc; }
     .results { margin: 20px 0; }
     table { border-collapse: collapse; width: 100%; margin: 10px 0; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th, td { border: 1px solid #ddd; padding: 6px; text-align: left; font-size: 14px; }
     th { background-color: #f2f2f2; }
     .side-by-side { display: flex; gap: 20px; }
     .side-by-side > div { flex: 1; }
+    .tabs { margin: 20px 0; }
+    .tab-button { padding: 10px 15px; cursor: pointer; border: none; background: #ddd; margin-right: 5px; }
+    .tab-button.active { background: #007acc; color: white; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .pagination { margin-top: 10px; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Two-Tower Movie Recommender</h1>
 
-    <div class="controls">
-      <button id="loadData">Load Data</button>
-      <button id="train" disabled>Train</button>
-      <button id="test" disabled>Test</button>
+    <div class="tabs">
+      <button class="tab-button active" data-tab="recommender">Recommender</button>
+      <button class="tab-button" data-tab="data">Data Explorer</button>
     </div>
 
-    <div id="status" class="status">Ready to load data...</div>
+    <!-- Recommender Tab -->
+    <div id="recommender" class="tab-content active">
+      <div class="controls">
+        <button id="loadData">Load Data</button>
+        <button id="train" disabled>Train</button>
+        <button id="test" disabled>Test</button>
+      </div>
 
-    <div class="chart-container">
-      <h3>Training Loss</h3>
-      <canvas id="lossChart" width="800" height="300"></canvas>
+      <div id="status" class="status">Ready to load data...</div>
+
+      <div class="chart-container">
+        <h3>Training Loss</h3>
+        <canvas id="lossChart" width="800" height="300"></canvas>
+      </div>
+
+      <div class="chart-container">
+        <h3>Item Embeddings (PCA)</h3>
+        <canvas id="embeddingChart" width="800" height="600"></canvas>
+      </div>
+
+      <div id="results" class="results"></div>
     </div>
 
-    <div class="chart-container">
-      <h3>Item Embeddings (PCA)</h3>
-      <canvas id="embeddingChart" width="800" height="600"></canvas>
+    <!-- Data Explorer Tab -->
+    <div id="data" class="tab-content">
+      <h2>Dataset Explorer</h2>
+      <button onclick="app.showInteractions()">Show Interactions</button>
+      <button onclick="app.showItems()">Show Items</button>
+      <div id="dataView"></div>
     </div>
-
-    <div id="results" class="results"></div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
   <script src="two-tower.js"></script>
   <script src="app.js"></script>
+  <script>
+    // Tabs logic
+    document.querySelectorAll('.tab-button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+      });
+    });
+  </script>
 </body>
 </html>
