@@ -1,152 +1,153 @@
-let model, interactions = [], items = new Map();
-let userToItems = {}, userIndex = {}, itemIndex = {}, reverseItems = {};
-let numUsers = 0, numItems = 0, numGenres = 1;
-const embDim = 32, hiddenDim = 64;
+let interactions = [];
+let items = new Map();
+let user2idx = {}, item2idx = {}, idx2item = {};
+let model;
 
 const status = msg => document.getElementById('status').innerText = msg;
 
-// Load MovieLens data
+// === LOAD DATA ===
 async function loadData() {
-  status('Loading data...');
-  const dataTxt = await fetch('data/u.data').then(r => r.text());
-  const itemTxt = await fetch('data/u.item').then(r => r.text());
+  const [udata, uitem] = await Promise.all([
+    fetch('data/u.data').then(r => r.text()),
+    fetch('data/u.item').then(r => r.text())
+  ]);
 
-  dataTxt.trim().split('\n').forEach(line => {
-    const [user, item, rating, ts] = line.split('\t').map(Number);
-    interactions.push({ userId: user, itemId: item, rating, ts });
-    if (!userToItems[user]) userToItems[user] = [];
-    userToItems[user].push({ item, rating, ts });
+  const lines = udata.trim().split('\n');
+  interactions = lines.map(l => {
+    const [u, i, r, t] = l.split('\t').map(Number);
+    return { userId: u, itemId: i, rating: r, ts: t };
   });
 
-  itemTxt.trim().split('\n').forEach(line => {
-    const parts = line.split('|');
-    const itemId = Number(parts[0]);
-    const title = parts[1];
-    items.set(itemId, { title });
+  const itemLines = uitem.trim().split('\n');
+  itemLines.forEach(l => {
+    const parts = l.split('|');
+    const id = Number(parts[0]);
+    items.set(id, { title: parts[1] });
   });
 
-  numUsers = Math.max(...interactions.map(i => i.userId)) + 1;
-  numItems = Math.max(...interactions.map(i => i.itemId)) + 1;
-  interactions = interactions.slice(0, 80000);
+  const users = [...new Set(interactions.map(x => x.userId))];
+  const itemIds = [...new Set(interactions.map(x => x.itemId))];
+  users.forEach((u, i) => user2idx[u] = i);
+  itemIds.forEach((i, j) => item2idx[i] = j);
+  itemIds.forEach((i, j) => idx2item[j] = i);
 
-  let u = 0, it = 0;
-  for (const uid of Object.keys(userToItems)) userIndex[uid] = u++;
-  for (const iid of items.keys()) itemIndex[iid] = it++;
-  reverseItems = Object.fromEntries(Object.entries(itemIndex).map(([k, v]) => [v, items.get(Number(k)).title]));
-
-  status('Data loaded. Users: ' + numUsers + ', Items: ' + numItems);
+  status(`Loaded ${interactions.length} interactions and ${itemIds.length} items. ${users.length} users have 20+ ratings.`);
 }
 
-// Train Two-Tower model
-async function trainModel() {
+document.getElementById('load').onclick = loadData;
+
+// === TRAIN ===
+document.getElementById('train').onclick = async () => {
+  const numUsers = Object.keys(user2idx).length;
+  const numItems = Object.keys(item2idx).length;
+  const numGenres = 20; // placeholder
+  const embDim = 32, hiddenDim = 64;
+
   model = new TwoTowerModel(numUsers, numItems, numGenres, embDim, hiddenDim);
 
-  const learningRate = 0.01;
+  const learningRate = 0.001;
   const optimizer = tf.train.adam(learningRate);
   const epochs = 15, batchSize = 256;
-  const losses = [];
+  const numBatches = Math.ceil(interactions.length / batchSize);
 
-  const lossCanvas = document.getElementById('lossChart');
-  const ctx = lossCanvas.getContext('2d');
+  const losses = [];
+  const ctx = document.getElementById('lossChart').getContext('2d');
 
   status('Training started...');
   for (let epoch = 0; epoch < epochs; epoch++) {
     tf.util.shuffle(interactions);
-    for (let i = 0; i < interactions.length; i += batchSize) {
-      const batch = interactions.slice(i, i + batchSize);
-      const userIdx = tf.tensor1d(batch.map(b => userIndex[b.userId]), 'int32');
-      const itemIdx = tf.tensor1d(batch.map(b => itemIndex[b.itemId]), 'int32');
 
-      const lossVal = optimizer.minimize(() => {
-        const uEmb = model.userForward(userIdx);
-        const iEmb = model.itemForward(itemIdx, tf.zeros([batch.length, numGenres]));
+    for (let b = 0; b < numBatches; b++) {
+      const batch = interactions.slice(b * batchSize, (b + 1) * batchSize);
+      const users = tf.tensor1d(batch.map(x => user2idx[x.userId]), 'int32');
+      const itemsIdx = tf.tensor1d(batch.map(x => item2idx[x.itemId]), 'int32');
+      const genreTensor = tf.zeros([batch.length, numGenres]);
+
+      const loss = optimizer.minimize(() => {
+        const uEmb = model.userForward(users);
+        const iEmb = model.itemForward(itemsIdx, genreTensor);
         const logits = tf.matMul(uEmb, iEmb, false, true);
-        const labels = tf.oneHot(tf.range(0, batch.length, 1, 'int32'), batch.length);
-        const loss = tf.losses.softmaxCrossEntropy(labels, logits);
-        return loss;
+        const labels = tf.tensor1d([...Array(batch.length).keys()], 'int32');
+        const lossVal = tf.losses.softmaxCrossEntropy(tf.oneHot(labels, batch.length), logits);
+        return lossVal;
       }, true);
 
-      const val = (await lossVal.data())[0];
-      losses.push(val);
-      if (i % (batchSize * 4) === 0) {
-        drawLoss(ctx, losses);
-        status(`Epoch ${epoch + 1}/${epochs} - Batch ${i}/${interactions.length} - Loss: ${val.toFixed(4)}`);
-        await tf.nextFrame();
-      }
+      const l = (await loss.data())[0];
+      losses.push(l);
+      drawLoss(ctx, losses);
+      if (b % 100 === 0) status(`Epoch ${epoch + 1}/${epochs} - Batch ${b}/${numBatches} - Loss: ${l.toFixed(4)}`);
+      await tf.nextFrame();
     }
   }
 
-  status('Training complete!');
-  await drawEmbeddingProjection(model.itemEmbedding);
-}
+  status('Training finished ✅');
+  drawPCA();
+};
 
-// Draw loss curve
+// === DRAW LOSS ===
 function drawLoss(ctx, losses) {
-  ctx.clearRect(0, 0, 500, 300);
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.beginPath();
-  ctx.moveTo(0, 300 - losses[0] * 20);
-  for (let i = 1; i < losses.length; i++) {
-    const x = (i / losses.length) * 500;
-    const y = 300 - losses[i] * 20;
+  ctx.moveTo(0, ctx.canvas.height - losses[0] * 20);
+  losses.forEach((l, i) => {
+    const x = (i / losses.length) * ctx.canvas.width;
+    const y = ctx.canvas.height - l * 20;
     ctx.lineTo(x, y);
-  }
+  });
   ctx.strokeStyle = 'blue';
   ctx.stroke();
 }
 
-// PCA projection visualization
-async function drawEmbeddingProjection(itemEmbedding) {
-  const emb = await itemEmbedding.array();
-  const sample = emb.slice(0, 1000);
-  const mean = tf.mean(sample, 0);
-  const centered = tf.sub(sample, mean);
-  const cov = tf.matMul(centered.transpose(), centered);
-  const { u } = tf.linalg.svd(cov);
-  const pc = tf.matMul(centered, u.slice([0, 0], [centered.shape[1], 2]));
-  const points = await pc.array();
-
-  const canvas = document.getElementById('embeddingChart');
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = 'steelblue';
-  for (const [x, y] of points) {
-    ctx.fillRect(canvas.width / 2 + x * 10, canvas.height / 2 + y * 10, 2, 2);
-  }
-  status('PCA projection drawn.');
+// === SIMPLE PCA ===
+function simplePCA(data, dim = 2) {
+  const X = tf.tensor2d(data);
+  const Xmean = X.sub(tf.mean(X, 0));
+  const cov = tf.matMul(Xmean.transpose(), Xmean).div(X.shape[0]);
+  const { eigenVectors } = tf.linalg.eigh(cov);
+  const topVecs = eigenVectors.slice([0, eigenVectors.shape[1] - dim], [-1, dim]);
+  const projected = tf.matMul(Xmean, topVecs);
+  return projected.arraySync();
 }
 
-// Test model
-async function testModel() {
-  const users = Object.keys(userToItems).filter(u => userToItems[u].length >= 20);
+// === DRAW PCA ===
+async function drawPCA() {
+  const itemEmb = await model.itemEmbedding.array();
+  const proj = simplePCA(itemEmb, 2);
+  const ctx = document.getElementById('projection').getContext('2d');
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  proj.slice(0, 500).forEach((p) => {
+    const x = (p[0] + 3) * 100;
+    const y = (p[1] + 3) * 100;
+    ctx.fillStyle = 'rgba(0,0,255,0.5)';
+    ctx.fillRect(x, y, 2, 2);
+  });
+}
+
+// === TEST ===
+document.getElementById('test').onclick = async () => {
+  const users = Object.keys(user2idx);
   const randUser = users[Math.floor(Math.random() * users.length)];
-  const userIdx = userIndex[randUser];
-  const topRated = userToItems[randUser]
-    .sort((a, b) => b.rating - a.rating)
-    .slice(0, 10)
-    .map(x => items.get(x.item).title);
+  const userIdx = tf.tensor1d([user2idx[randUser]], 'int32');
+  const uEmb = model.userForward(userIdx);
 
-  const userEmb = model.userForward(tf.tensor1d([userIdx], 'int32'));
-  const allItemsTensor = tf.range(0, numItems, 1, 'int32');
-  const itemEmbeddings = model.itemForward(allItemsTensor, tf.zeros([numItems, numGenres]));
-  const scores = tf.matMul(userEmb, itemEmbeddings.transpose());
-  const topIndices = tf.topk(scores, 10).indices.dataSync();
-  const deepRecs = Array.from(topIndices).map(i => reverseItems[i]);
+  const allItems = tf.tensor1d([...Array(Object.keys(item2idx).length).keys()], 'int32');
+  const genreTensor = tf.zeros([allItems.shape[0], 20]);
+  const iEmb = model.itemForward(allItems, genreTensor);
+  const scores = tf.matMul(uEmb, iEmb, false, true).flatten();
 
-  renderResults(randUser, topRated, deepRecs, deepRecs);
-}
+  const topK = await scores.topk(10);
+  const topIdx = await topK.indices.array();
+  const topTitles = topIdx.map(i => items.get(idx2item[i]).title);
 
-// Show result tables
-function renderResults(userId, topRated, modelRecs, deepRecs) {
-  const tableHTML = `
-    <h3>User ${userId}</h3>
+  const div = document.getElementById('results');
+  div.innerHTML = `
+    <h3>User ${randUser}</h3>
     <table>
-      <tr><th>Top Rated</th><th>Model Recommendations</th><th>Deep Learning Recommendations</th></tr>
-      ${Array.from({ length: 10 }).map((_, i) => `
-        <tr>
-          <td>${topRated[i] || ''}</td>
-          <td>${modelRecs[i] || ''}</td>
-          <td>${deepRecs[i] || ''}</td>
-        </tr>`).join('')}
-    </table>`;
-  document.getElementById('results').innerHTML = tableHTML;
-}
+      <tr><th>Top Rated</th><th>Model Recommendations</th></tr>
+      <tr>
+        <td>${interactions.filter(x => x.userId == randUser).slice(0, 10).map(x => items.get(x.itemId)?.title).join('<br>')}</td>
+        <td>${topTitles.join('<br>')}</td>
+      </tr>
+    </table>
+  `;
+};
