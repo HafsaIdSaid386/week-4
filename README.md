@@ -17,7 +17,7 @@ Context
   - Item tower: item_id + genres → embedding → MLP
   - Scoring: dot product
   - Loss: sampled-softmax (in-batch negatives) or BPR-style pairwise; acceptable to use a simple contrastive loss with in-batch negatives for clarity.
-.[tensorflow+1](https://www.tensorflow.org/recommenders/examples/basic_retrieval)
+tensorflow+1
         
 -   UX requirements:
     
