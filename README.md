@@ -117,7 +117,7 @@ b) app.js
 
 c) two-tower.js
 
-- Implement a minimal Two-Tower in TF.js:
+- Implement a Deep-Learning Two-Tower (MLP) in TF.js:
 
   - Class TwoTowerModel:
 
