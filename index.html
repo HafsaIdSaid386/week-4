@@ -2,71 +2,37 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🎬 Two-Tower Retrieval Demo (MovieLens 100K)</title>
+  <title>🎬 MovieLens Two-Tower Recommender</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="two-tower.js"></script>
+  <script src="app.js" defer></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      margin: 30px;
-    }
-    h1 {
-      font-size: 1.8em;
-    }
-    button {
-      margin: 5px;
-      padding: 8px 16px;
-      font-size: 1em;
-    }
-    #results table {
-      width: 90%;
-      margin: 20px auto;
-      border-collapse: collapse;
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 8px;
-    }
-    th {
-      background-color: #f4f4f4;
-    }
-    canvas {
-      border: 1px solid #ddd;
-      margin: 10px;
-    }
-    #status {
-      color: blue;
-      margin: 10px;
-    }
-    #tips {
-      font-size: 0.9em;
-      color: #333;
-    }
+    body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
+    button { margin: 5px; padding: 10px 20px; font-size: 15px; }
+    #results table { border-collapse: collapse; width: 90%; margin: 15px auto; }
+    td, th { border: 1px solid #aaa; padding: 6px 10px; }
+    th { background: #f4f4f4; }
+    canvas { border: 1px solid #ccc; margin: 10px; }
+    .side-by-side { display: flex; justify-content: space-around; flex-wrap: wrap; }
   </style>
 </head>
 <body>
-  <h1>🎬 Two-Tower Retrieval Demo (MovieLens 100K)</h1>
-
-  <button onclick="loadData()">Load Data</button>
-  <button onclick="trainModel()">Train</button>
-  <button onclick="testModel()">Test</button>
-
-  <div id="status">Status: Waiting...</div>
+  <h2>🎬 MovieLens 100K – Two-Tower Deep Learning Recommender</h2>
 
   <div>
-    <canvas id="lossChart" width="500" height="300"></canvas>
-    <canvas id="embeddingChart" width="500" height="300"></canvas>
+    <button id="loadData">Load Data</button>
+    <button id="train" disabled>Train</button>
+    <button id="test" disabled>Test</button>
   </div>
+
+  <p id="status">Status: Waiting for data…</p>
+
+  <canvas id="lossChart" width="600" height="250"></canvas>
+  <canvas id="embeddingChart" width="600" height="300"></canvas>
 
   <div id="results"></div>
 
-  <div id="tips">
-    💡 Tips: Training may take ~1–2 minutes in browser depending on dataset and embedding size.<br />
-    Host these files on GitHub Pages and keep <code>u.data</code> and <code>u.item</code> in <code>/data/</code>.
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.14.0/dist/tf.min.js"></script>
-  <script src="two-tower.js"></script>
-  <script src="app.js"></script>
+  <p>💡 Training may take ~1–2 minutes depending on browser speed.<br>
+     Place <code>u.data</code> and <code>u.item</code> in <code>/data/</code> folder.</p>
 </body>
 </html>
