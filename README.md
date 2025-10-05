@@ -117,54 +117,48 @@ b) app.js
 
 c) two-tower.js
 
--   Implement a minimal Two‑Tower in TF.js:
-    
-    class TwoTowerModel:```js
-class TwoTowerModel {
-  constructor(numUsers, numItems, numGenres, embDim, hiddenDim) {
-    // ======================================================
-    // Deep Learning Two-Tower Model
-    // ======================================================
-    //
-    // Each tower (User & Item) uses a Multi-Layer Perceptron (MLP)
-    // with at least one hidden layer. Item tower integrates
-    // genre information as additional features.
-    //
+- Implement a minimal Two-Tower in TF.js:
 
-    // User and item embeddings
-    this.userEmbedding = tf.variable(tf.randomNormal([numUsers, embDim], 0, 0.05));
-    this.itemEmbedding = tf.variable(tf.randomNormal([numItems, embDim], 0, 0.05));
+  - Class TwoTowerModel:
 
-    // Item genre feature input (one-hot or multi-hot vectors)
-    this.genreWeights = tf.variable(tf.randomNormal([numGenres, embDim], 0, 0.05));
+    ```js
+    class TwoTowerModel {
+      constructor(numUsers, numItems, numGenres, embDim, hiddenDim) {
+        // User and item embeddings
+        this.userEmbedding = tf.variable(tf.randomNormal([numUsers, embDim], 0, 0.05));
+        this.itemEmbedding = tf.variable(tf.randomNormal([numItems, embDim], 0, 0.05));
 
-    // Define MLP layers (shared architecture for both towers)
-    this.userDense1 = tf.layers.dense({ units: hiddenDim, activation: 'relu' });
-    this.userDense2 = tf.layers.dense({ units: embDim, activation: 'linear' });
+        // Item genre feature input (one-hot or multi-hot vectors)
+        this.genreWeights = tf.variable(tf.randomNormal([numGenres, embDim], 0, 0.05));
 
-    this.itemDense1 = tf.layers.dense({ units: hiddenDim, activation: 'relu' });
-    this.itemDense2 = tf.layers.dense({ units: embDim, activation: 'linear' });
-  }
+        // Define MLP layers (shared architecture for both towers)
+        this.userDense1 = tf.layers.dense({ units: hiddenDim, activation: 'relu' });
+        this.userDense2 = tf.layers.dense({ units: embDim, activation: 'linear' });
 
-  userForward(userIdxTensor) {
-    const userEmb = tf.gather(this.userEmbedding, userIdxTensor);
-    const h1 = this.userDense1.apply(userEmb);
-    return this.userDense2.apply(h1);
-  }
+        this.itemDense1 = tf.layers.dense({ units: hiddenDim, activation: 'relu' });
+        this.itemDense2 = tf.layers.dense({ units: embDim, activation: 'linear' });
+      }
 
-  itemForward(itemIdxTensor, genreTensor) {
-    const itemEmb = tf.gather(this.itemEmbedding, itemIdxTensor);
-    const genreEmb = tf.matMul(genreTensor, this.genreWeights);
-    const combined = tf.add(itemEmb, genreEmb);
-    const h1 = this.itemDense1.apply(combined);
-    return this.itemDense2.apply(h1);
-  }
+      userForward(userIdxTensor) {
+        const userEmb = tf.gather(this.userEmbedding, userIdxTensor);
+        const h1 = this.userDense1.apply(userEmb);
+        return this.userDense2.apply(h1);
+      }
 
-  score(userEmb, itemEmb) {
-    return tf.sum(tf.mul(userEmb, itemEmb), -1);
-  }
-}
-```
+      itemForward(itemIdxTensor, genreTensor) {
+        const itemEmb = tf.gather(this.itemEmbedding, itemIdxTensor);
+        const genreEmb = tf.matMul(genreTensor, this.genreWeights);
+        const combined = tf.add(itemEmb, genreEmb);
+        const h1 = this.itemDense1.apply(combined);
+        return this.itemDense2.apply(h1);
+      }
+
+      score(userEmb, itemEmb) {
+        return tf.sum(tf.mul(userEmb, itemEmb), -1);
+      }
+    }
+    ```
+
 
             
     -   Loss:
