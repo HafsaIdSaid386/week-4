@@ -74,9 +74,9 @@ async function trainModel() {
   const numItems = items.size;
   const numGenres = 1; // placeholder (not used in this demo)
   model = new TwoTowerModel(numUsers, numItems, numGenres, embDim, hiddenDim);
-  const optimizer = tf.train.adam(0.001);
+  const optimizer = tf.train.adam(0.005);
 
-  const epochs = 3, batchSize = 512;
+  const epochs =10, batchSize = 256;
   const numBatches = Math.ceil(interactions.length / batchSize);
   const losses = [];
 
