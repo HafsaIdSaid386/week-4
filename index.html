@@ -2,18 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>🎬 MovieLens Two-Tower Recommender</title>
+  <title>🎬 MovieLens Two-Tower Deep Learning Recommender</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
   <script src="two-tower.js"></script>
   <script src="app.js" defer></script>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
     button { margin: 5px; padding: 10px 20px; font-size: 15px; }
-    #results table { border-collapse: collapse; width: 90%; margin: 15px auto; }
-    td, th { border: 1px solid #aaa; padding: 6px 10px; }
+    #results table { border-collapse: collapse; width: 95%; margin: 10px auto; }
+    td, th { border: 1px solid #aaa; padding: 5px 8px; }
     th { background: #f4f4f4; }
     canvas { border: 1px solid #ccc; margin: 10px; }
-    .side-by-side { display: flex; justify-content: space-around; flex-wrap: wrap; }
+    .side-by-side { display: flex; justify-content: space-around; flex-wrap: wrap; gap: 20px; }
   </style>
 </head>
 <body>
@@ -32,7 +32,7 @@
 
   <div id="results"></div>
 
-  <p>💡 Training may take ~1–2 minutes depending on browser speed.<br>
-     Place <code>u.data</code> and <code>u.item</code> in <code>/data/</code> folder.</p>
+  <p>💡 Training may take ~1–2 minutes depending on your browser.<br>
+     Place <code>u.data</code> and <code>u.item</code> in a folder named <code>data/</code>.</p>
 </body>
 </html>
