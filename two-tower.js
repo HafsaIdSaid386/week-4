@@ -1,17 +1,12 @@
-// ======================================================
-// two-tower.js - Deep Learning Two-Tower Model (MLP)
-// ======================================================
-
+// Deep Learning Two-Tower Model for MovieLens
 class TwoTowerModel {
   constructor(numUsers, numItems, numGenres, embDim, hiddenDim) {
-    // User & item embeddings
+    // Embedding layers
     this.userEmbedding = tf.variable(tf.randomNormal([numUsers, embDim], 0, 0.05));
     this.itemEmbedding = tf.variable(tf.randomNormal([numItems, embDim], 0, 0.05));
-
-    // Optional genre weights
     this.genreWeights = tf.variable(tf.randomNormal([numGenres, embDim], 0, 0.05));
 
-    // MLP layers for both towers
+    // MLP towers
     this.userDense1 = tf.layers.dense({ units: hiddenDim, activation: 'relu' });
     this.userDense2 = tf.layers.dense({ units: embDim, activation: 'linear' });
 
@@ -20,17 +15,17 @@ class TwoTowerModel {
   }
 
   userForward(userIdxTensor) {
-    const uEmb = tf.gather(this.userEmbedding, userIdxTensor);
-    const h = this.userDense1.apply(uEmb);
-    return this.userDense2.apply(h);
+    const userEmb = tf.gather(this.userEmbedding, userIdxTensor);
+    const h1 = this.userDense1.apply(userEmb);
+    return this.userDense2.apply(h1);
   }
 
   itemForward(itemIdxTensor, genreTensor) {
-    const iEmb = tf.gather(this.itemEmbedding, itemIdxTensor);
-    const gEmb = tf.matMul(genreTensor, this.genreWeights);
-    const combined = tf.add(iEmb, gEmb);
-    const h = this.itemDense1.apply(combined);
-    return this.itemDense2.apply(h);
+    const itemEmb = tf.gather(this.itemEmbedding, itemIdxTensor);
+    const genreEmb = tf.matMul(genreTensor, this.genreWeights);
+    const combined = tf.add(itemEmb, genreEmb);
+    const h1 = this.itemDense1.apply(combined);
+    return this.itemDense2.apply(h1);
   }
 
   score(userEmb, itemEmb) {
