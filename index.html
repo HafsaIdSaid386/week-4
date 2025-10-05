@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Two-Tower MovieLens Demo (TensorFlow.js)</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
+    h1 { color: #333; }
+    button { margin: 5px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    #status { margin: 10px; color: #0066cc; }
+    canvas { border: 1px solid #ccc; margin-top: 10px; }
+    table { width: 90%; margin: 20px auto; border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 6px; }
+    th { background: #f4f4f4; }
+    td { text-align: left; }
+  </style>
+</head>
+<body>
+  <h1>🎬 Two-Tower Retrieval Demo (MovieLens 100K)</h1>
+
+  <button id="loadBtn">Load Data</button>
+  <button id="trainBtn">Train</button>
+  <button id="testBtn">Test</button>
+
+  <div id="status">Status: waiting...</div>
+  <canvas id="lossChart" width="600" height="200"></canvas>
+  <canvas id="embeddingPlot" width="600" height="400"></canvas>
+
+  <div id="results"></div>
+
+  <p>
+    💡 Tips: Training may take ~1–2 minutes in browser depending on dataset and embedding size.<br>
+    Host these files on GitHub Pages and keep <code>u.data</code> and <code>u.item</code> in <code>/data/</code>.
+  </p>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4"></script>
+  <script src="two-tower.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
