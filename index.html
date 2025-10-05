@@ -1,42 +1,36 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>🎬 MovieLens Two-Tower Deep Learning Recommender</title>
+  <title>Two-Tower Movie Recommender</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="two-tower.js"></script>
+  <script src="app.js" defer></script>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
-    button { margin: 5px; padding: 10px 18px; font-size: 15px; }
-    #status { margin: 8px 0; color: #005bbb; }
-    canvas { border: 1px solid #ccc; margin: 10px; }
-    .side-by-side { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
-    table { border-collapse: collapse; min-width: 320px; }
-    th, td { border: 1px solid #aaa; padding: 6px 8px; text-align: left; }
-    th { background: #f4f4f4; }
+    body { font-family: Arial, sans-serif; text-align: center; }
+    button { margin: 10px; padding: 10px 20px; font-size: 16px; }
+    #results table { margin: 20px auto; border-collapse: collapse; }
+    td, th { border: 1px solid #999; padding: 6px 10px; }
+    canvas { border: 1px solid #ccc; margin: 15px; }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.14.0/dist/tf.min.js"></script>
-  <script defer src="two-tower.js"></script>
-  <script defer src="app.js"></script>
 </head>
 <body>
-  <h2>🎬 MovieLens 100K – Two-Tower (Deep Learning) Demo</h2>
+  <h2>🎬 Two-Tower Movie Recommender (MovieLens 100K)</h2>
 
   <div>
-    <button id="loadData">Load Data</button>
-    <button id="train" disabled>Train</button>
-    <button id="test" disabled>Test</button>
+    <button id="load">Load Data</button>
+    <button id="train">Train</button>
+    <button id="test">Test</button>
   </div>
 
-  <p id="status">Status: Waiting…</p>
+  <p id="status">Status: Idle</p>
 
-  <canvas id="lossChart" width="640" height="240"></canvas>
-  <canvas id="embeddingChart" width="640" height="360"></canvas>
+  <canvas id="lossChart" width="600" height="250"></canvas>
+  <canvas id="projection" width="600" height="400"></canvas>
 
   <div id="results"></div>
 
-  <p>
-    💡 Tip: Serve over HTTP (e.g., GitHub Pages) so <code>fetch('data/u.data')</code> works.<br>
-    Place <code>/data/u.data</code> and <code>/data/u.item</code> next to this file.
-  </p>
+  <p>💡 Training may take ~1–2 minutes in browser depending on dataset and embedding size.<br>
+     Host these files on GitHub Pages and keep <code>u.data</code> and <code>u.item</code> in <code>/data/</code>.</p>
 </body>
 </html>
