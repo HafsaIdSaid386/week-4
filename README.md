@@ -121,7 +121,22 @@ c) two-tower.js
     
     -   Class TwoTowerModel:
         
-        class TwoTowerModel {
+        c) two-tower.js
+
+- Implement a minimal Two-Tower in TF.js (Deep Learning version):
+
+```js
+// ======================================================
+// TwoTowerModel (Deep Learning version)
+// ======================================================
+//
+// This replaces the previous static embedding model with
+// a Deep Learning MLP-based architecture for both user
+// and item towers. It also integrates genre information
+// as item-side features.
+//
+
+class TwoTowerModel {
   constructor(numUsers, numItems, numGenres, embDim, hiddenDim) {
     // User and item embeddings
     this.userEmbedding = tf.variable(tf.randomNormal([numUsers, embDim], 0, 0.05));
