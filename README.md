@@ -11,15 +11,13 @@ Context
         
     -   u.item format: item_id|title|release_date|…; use item_id and title, optionally year parsed from title. [info.univ-tours](https://www.info.univ-tours.fr/~vperalta/publications/trapmd2-vp.pdf)
         
--   Goal: Build an in‑browser Two‑Tower model:
-    
-    -   User tower: user_id → embedding
-        
-    -   Item tower: item_id → embedding
-        
-    -   Scoring: dot product
-        
-    -   Loss: sampled‑softmax (in‑batch negatives) or BPR‑style pairwise; acceptable to use a simple contrastive loss with in‑batch negatives for clarity.[tensorflow+1](https://www.tensorflow.org/recommenders/examples/basic_retrieval)
+-   Goal: - Goal: Build an **in-browser Deep Learning Two-Tower (MLP)** model:
+  
+  - User tower: user_id → embedding → MLP
+  - Item tower: item_id + genres → embedding → MLP
+  - Scoring: dot product
+  - Loss: sampled-softmax (in-batch negatives) or BPR-style pairwise; acceptable to use a simple contrastive loss with in-batch negatives for clarity.
+.[tensorflow+1](https://www.tensorflow.org/recommenders/examples/basic_retrieval)
         
 -   UX requirements:
     
@@ -117,7 +115,7 @@ b) app.js
 
 c) two-tower.js
 
-- Implement a Deep-Learning Two-Tower (MLP) in TF.js:
+-  Implement a **Deep-Learning Two-Tower (MLP)** in TF.js:
 
   - Class TwoTowerModel:
 
