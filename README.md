@@ -11,7 +11,7 @@ Context
         
     -   u.item format: item_id|title|release_date|…; use item_id and title, optionally year parsed from title. [info.univ-tours](https://www.info.univ-tours.fr/~vperalta/publications/trapmd2-vp.pdf)
         
--   Goal: - Goal: Build an **in-browser Deep Learning Two-Tower (MLP)** model:
+-   Goal: Build an **in-browser Deep Learning Two-Tower (MLP)** model:
   
   - User tower: user_id → embedding → MLP
   - Item tower: item_id + genres → embedding → MLP
