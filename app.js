@@ -23,11 +23,11 @@ let ui = {};
 let model; // TwoTowerModel
 let globalItemGenreTensor; // [numItems, numGenres] float32
 let trainCfg = {
-  epochs: 10,
-  batchSize: 512,
-  embDim: 32,
-  hiddenDim: 64,
-  learningRate: 0.001,
+  epochs: 30,      // More epochs for better learning
+  batchSize: 256,  // Smaller batches for better gradients
+  embDim: 64,      // Larger embeddings
+  hiddenDim: 128,  // Larger hidden layers
+  learningRate: 0.01, // Higher learning rate
   maxInteractions: 80000,
   useBPR: false
 };
@@ -71,35 +71,19 @@ class SimpleLine {
   }
 }
 
-// PCA (power iteration for top-2 eigenvectors of covariance)
-async function pca2D(tensor2d /* [N, D] */) {
+// Better PCA using TF.js SVD
+async function performTFjsPCA(embeddings) {
   return tf.tidy(() => {
-    const X = tensor2d;                       // [N,D]
-    const mean = tf.mean(X, 0, true);         // [1,D]
-    const Xc = tf.sub(X, mean);               // centered
-    const cov = tf.matMul(Xc.transpose(), Xc).div(X.shape[0]-1); // [D,D]
-
-    function powerVec(init, iters=30){
-      let v = init;
-      for(let i=0;i<iters;i++){
-        v = tf.matMul(cov, v);
-        v = tf.div(v, tf.norm(v));
-      }
-      return v; // [D,1]
-    }
-    const D = X.shape[1];
-    let v1 = powerVec(tf.randomNormal([D,1],0,1));
-    const lambda1 = tf.sum(tf.mul(v1, tf.matMul(cov, v1)));
-    // Deflate
-    const covDef = tf.sub(cov, tf.matMul(v1, v1.transpose()).mul(lambda1));
-    let v2 = v1; // reuse var; recompute with deflated cov
-    for(let i=0;i<30;i++){
-      v2 = tf.matMul(covDef, v2);
-      v2 = tf.div(v2, tf.norm(v2));
-    }
-    const W = tf.concat([v1, v2], 1); // [D,2]
-    const proj = tf.matMul(Xc, W);    // [N,2]
-    return proj;
+    const X = tf.tensor2d(embeddings);
+    const centered = X.sub(X.mean(0));
+    const covariance = tf.matMul(centered.transpose(), centered).div(X.shape[0] - 1);
+    
+    // Use SVD for more stable PCA
+    const [u, s, v] = tf.svd(covariance);
+    const components = v.slice([0, 0], [v.shape[0], 2]);
+    
+    const projected = tf.matMul(centered, components);
+    return projected.arraySync();
   });
 }
 
@@ -111,7 +95,7 @@ function topKIndices(scores, k, excludeSet) {
     if(excludeSet && excludeSet.has(i)) continue;
     const val = arr[i];
     if(heap.length<k){ heap.push([val,i]); heap.sort((a,b)=>a[0]-b[0]); }
-    else if(val>heap[0][0]){ heap[0]=[val,i]; heap.sort((a,b)=>a[0]-a[0]); }
+    else if(val>heap[0][0]){ heap[0]=[val,i]; heap.sort((a,b)=>a[0]-b[0]); }
   }
   return heap.sort((a,b)=>b[0]-a[0]).map(x=>x[1]);
 }
@@ -258,68 +242,112 @@ async function train() {
 
 async function drawPCA() {
   const canvas = ui.pcaCanvas, ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#0b1229';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
   const numItems = dataState.itemIds.length;
-  const sampleSize = Math.min(1000, numItems);
-  const step = Math.floor(numItems / sampleSize) || 1;
-  const idxs = [];
-  for (let i=0;i<numItems;i+=step) idxs.push(i);
-  const idxTensor = tf.tensor1d(new Int32Array(idxs), 'int32');
+  const sampleSize = Math.min(800, numItems);
+  
+  // Sample diverse items for better visualization
+  const step = Math.floor(numItems / sampleSize);
+  const sampleIndices = [];
+  for (let i = 0; i < sampleSize; i++) {
+    sampleIndices.push(Math.min(i * step, numItems - 1));
+  }
+
+  const idxTensor = tf.tensor1d(sampleIndices, 'int32');
   const genreBatch = tf.gather(globalItemGenreTensor, idxTensor);
 
-  // Use PCA-specific forward pass without normalization
-  const emb = await tf.tidy(() => model.itemForwardForPCA(idxTensor, genreBatch).array());
-  const proj = await pca2D(tf.tensor2d(emb));
-  const points = await proj.array();
-  const xs = points.map(p=>p[0]), ys = points.map(p=>p[1]);
-  
-  // Better normalization for visualization
-  const rangeX = Math.max(...xs) - Math.min(...xs);
-  const rangeY = Math.max(...ys) - Math.min(...ys);
-  const padding = 0.1;
-  
-  const minX = Math.min(...xs) - rangeX * padding;
-  const maxX = Math.max(...xs) + rangeX * padding;
-  const minY = Math.min(...ys) - rangeY * padding;
-  const maxY = Math.max(...ys) + rangeY * padding;
-  
-  const norm = (v, a, b, w) => ( (v-a)/(b-a) ) * w;
-
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle = '#0b1229'; 
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle = '#93c5fd88';
-  
-  const titles = [];
-  for (let k=0;k<points.length;k++){
-    const x = norm(xs[k], minX, maxX, canvas.width);
-    const y = canvas.height - norm(ys[k], minY, maxY, canvas.height);
-    ctx.beginPath(); 
-    ctx.arc(x,y,2.5,0,Math.PI*2); 
-    ctx.fill();
-    titles.push(dataState.items.get(dataState.itemIds[idxs[k]]).title);
-  }
-  
-  // Hover label
-  canvas.onmousemove = (e)=>{
-    const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX-rect.left)*(canvas.width/rect.width);
-    const my = (e.clientY-rect.top)*(canvas.height/rect.height);
-    let hit = -1;
-    let minDist = 25; // Increased hover radius
+  try {
+    const emb = await tf.tidy(() => model.itemForwardForPCA(idxTensor, genreBatch));
+    const embArray = await emb.array();
     
-    for (let k=0;k<points.length;k++){
-      const x = norm(xs[k], minX, maxX, canvas.width);
-      const y = canvas.height - norm(ys[k], minY, maxY, canvas.height);
-      const dist = (x-mx)*(x-mx) + (y-my)*(y-my);
-      if (dist < minDist) { 
-        hit = k; 
+    // Use TF.js built-in PCA for better results
+    const proj = await performTFjsPCA(embArray);
+    const xs = proj.map(p => p[0]);
+    const ys = proj.map(p => p[1]);
+    
+    // Calculate visualization parameters
+    const xMin = Math.min(...xs), xMax = Math.max(...xs);
+    const yMin = Math.min(...ys), yMax = Math.max(...ys);
+    const xRange = xMax - xMin || 1;
+    const yRange = yMax - yMin || 1;
+    
+    const padding = 0.1;
+    const scaleX = (canvas.width * (1 - 2 * padding)) / xRange;
+    const scaleY = (canvas.height * (1 - 2 * padding)) / yRange;
+    const scale = Math.min(scaleX, scaleY);
+    
+    const offsetX = canvas.width * padding - xMin * scale;
+    const offsetY = canvas.height * (1 - padding) - yMin * scale;
+    
+    // Draw clusters with different colors based on position
+    const titles = [];
+    
+    for (let k = 0; k < proj.length; k++) {
+      const x = offsetX + xs[k] * scale;
+      const y = offsetY - ys[k] * scale; // Flip Y axis
+      
+      // Color points based on their quadrant for better visualization
+      const quadrantX = Math.floor((xs[k] - xMin) / (xRange / 3));
+      const quadrantY = Math.floor((ys[k] - yMin) / (yRange / 3));
+      const colors = ['#22d3ee', '#a78bfa', '#fbbf24', '#34d399', '#f87171', '#60a5fa'];
+      ctx.fillStyle = colors[(quadrantX + quadrantY) % colors.length];
+      
+      ctx.beginPath();
+      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      titles.push(dataState.items.get(dataState.itemIds[sampleIndices[k]]).title);
+    }
+    
+    // Add grid and labels for better readability
+    ctx.strokeStyle = '#374151';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(offsetX + xMin * scale, offsetY - yMax * scale, xRange * scale, yRange * scale);
+    
+    setupHover(canvas, proj, titles, offsetX, offsetY, scale, xMin, yMin);
+    
+  } catch (error) {
+    console.error('PCA Error:', error);
+    logStatus('PCA failed: ' + error.message);
+  } finally {
+    tf.dispose([idxTensor, genreBatch]);
+  }
+}
+
+// Update the hover function:
+function setupHover(canvas, points, titles, offsetX, offsetY, scale, xMin, yMin) {
+  const ctx = canvas.getContext('2d');
+  const hoverLabel = ui.hoverTitle;
+  
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    
+    let closestIndex = -1;
+    let minDist = 15;
+    
+    for (let k = 0; k < points.length; k++) {
+      const x = offsetX + points[k][0] * scale;
+      const y = offsetY - points[k][1] * scale;
+      const dist = Math.sqrt((x - mx) ** 2 + (y - my) ** 2);
+      if (dist < minDist) {
         minDist = dist;
+        closestIndex = k;
       }
     }
-    ui.hoverTitle.textContent = hit>=0 ? titles[hit] : '';
+    
+    hoverLabel.textContent = closestIndex >= 0 ? titles[closestIndex] : 'Hover over points to see movie titles';
+    hoverLabel.style.color = closestIndex >= 0 ? '#22d3ee' : '#9ca3af';
   };
 
-  tf.dispose([idxTensor, genreBatch, proj]);
+  canvas.onmouseleave = () => {
+    hoverLabel.textContent = 'Hover over points to see movie titles';
+    hoverLabel.style.color = '#9ca3af';
+  };
 }
 
 /* ------------------------ Testing / Recommendation ------------------------ */
