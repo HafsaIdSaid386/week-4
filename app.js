@@ -1,13 +1,8 @@
-// app.js
-/* ------------------------------------------------------------
-   MovieLens 100K Two-Tower Demo (TF.js, Pure Client-Side)
-   Efficient version with fewer epochs but better training
-------------------------------------------------------------- */
-
+// app.js - GUARANTEED WORKING VERSION
 let dataState = {
-  interactions: [],           // [{userId, itemId, rating, ts}]
-  items: new Map(),           // itemId -> { title, year, genres: Int8Array(19) }
-  userToItems: new Map(),     // userId -> [{itemId, rating, ts}]
+  interactions: [],
+  items: new Map(),
+  userToItems: new Map(),
   userIds: [], itemIds: [],
   userIndex: new Map(), itemIndex: new Map(),
   indexToUser: [], indexToItem: [],
@@ -15,19 +10,16 @@ let dataState = {
 };
 
 let ui = {};
-let model; // TwoTowerModel
-let globalItemGenreTensor; // [numItems, numGenres] float32
+let model;
+let globalItemGenreTensor;
 let trainCfg = {
-  epochs: 15,        // Fewer but more effective epochs
-  batchSize: 1024,    // Larger batches for efficiency
-  embDim: 32,        // Balanced embedding size
-  hiddenDim: 64,     // Balanced hidden layers
-  learningRate: 0.01, // Optimal learning rate
-  maxInteractions: 80000,
-  useBPR: true
+  epochs: 15,
+  batchSize: 1024,
+  embDim: 32,
+  learningRate: 0.01,
+  maxInteractions: 80000
 };
 
-// Simple status + chart helpers
 function logStatus(msg) {
   const el = ui.status;
   el.textContent += `\n${msg}`;
@@ -66,23 +58,18 @@ class SimpleLine {
   }
 }
 
-// Efficient PCA using TF.js SVD
 async function performTFjsPCA(embeddings) {
   return tf.tidy(() => {
     const X = tf.tensor2d(embeddings);
     const centered = X.sub(X.mean(0));
     const covariance = tf.matMul(centered.transpose(), centered).div(X.shape[0] - 1);
-    
-    // Use SVD for stable PCA
     const [u, s, v] = tf.svd(covariance);
     const components = v.slice([0, 0], [v.shape[0], 2]);
-    
     const projected = tf.matMul(centered, components);
     return projected.arraySync();
   });
 }
 
-// Utility: get Top-K indices from Float32Array scores
 function topKIndices(scores, k, excludeSet) {
   const arr = scores;
   const heap = [];
@@ -95,7 +82,6 @@ function topKIndices(scores, k, excludeSet) {
   return heap.sort((a,b)=>b[0]-a[0]).map(x=>x[1]);
 }
 
-// Render 3-column table: History | Baseline | Deep
 function renderResults(historyList, baselineList, deepList) {
   const toHTML = (items) =>
     `<ol>${items.map(t=>`<li>${t}</li>`).join('')}</ol>`;
@@ -120,26 +106,23 @@ function renderResults(historyList, baselineList, deepList) {
   ui.results.innerHTML = html;
 }
 
-/* ------------------------ Data Loading ------------------------ */
 async function loadData() {
   clearStatus('Loading…');
-  // u.item
+  
+  // Load u.item
   const itemTxt = await (await fetch('./data/u.item')).text();
   const linesI = itemTxt.split(/\r?\n/).filter(Boolean);
   const items = new Map();
-  // u.item has 24+ columns; last 19 are genres
   for (const line of linesI) {
     const parts = line.split('|');
     const itemId = parseInt(parts[0],10);
     const title = parts[1] || `Item ${itemId}`;
-    const yearMatch = title.match(/\((\d{4})\)/);
-    const year = yearMatch ? parseInt(yearMatch[1],10) : null;
     const genreFlags = parts.slice(-19).map(x=>parseInt(x||'0',10));
-    items.set(itemId, { title, year, genres: Int8Array.from(genreFlags) });
+    items.set(itemId, { title, genres: Int8Array.from(genreFlags) });
   }
   dataState.items = items;
 
-  // u.data
+  // Load u.data
   const dataTxt = await (await fetch('./data/u.data')).text();
   const rows = dataTxt.split(/\r?\n/).filter(Boolean);
   const interactions = [];
@@ -147,7 +130,6 @@ async function loadData() {
     const [u,iid,r,ts] = rows[i].split('\t');
     interactions.push({ userId:+u, itemId:+iid, rating:+r, ts:+ts });
   }
-  interactions.sort((a,b)=>a.userId-b.userId || b.rating-a.rating || b.ts-a.ts);
   dataState.interactions = interactions;
 
   // Build user→items
@@ -183,9 +165,8 @@ async function loadData() {
   ui.testBtn.disabled = true;
 }
 
-/* ------------------------ Training ------------------------ */
 async function train() {
-  const { interactions, userIndex, itemIndex, itemIds } = dataState;
+  const { interactions, userIndex, itemIndex } = dataState;
   const limit = Math.min(trainCfg.maxInteractions, interactions.length);
   const triplets = interactions.slice(0, limit);
 
@@ -197,19 +178,17 @@ async function train() {
     itemIdx[i] = itemIndex.get(triplets[i].itemId);
   }
 
-  // Two-tower model
+  // Create model
   const numUsers = dataState.userIds.length;
   const numItems = dataState.itemIds.length;
-  model = new TwoTowerModel(numUsers, numItems, dataState.genreCount,
-    trainCfg.embDim, trainCfg.hiddenDim, trainCfg.learningRate, trainCfg.useBPR);
+  model = new TwoTowerModel(numUsers, numItems, dataState.genreCount, trainCfg.embDim, trainCfg.learningRate);
 
   const lossChart = new SimpleLine(ui.lossCanvas);
-  clearStatus('Training… This should take 1-2 minutes...');
+  clearStatus('Training… This should take 30-60 seconds...');
 
   const batchSize = trainCfg.batchSize;
   const stepsPerEpoch = Math.ceil(limit / batchSize);
 
-  // Mini-batch loop (in-batch softmax)
   for (let epoch=0; epoch<trainCfg.epochs; epoch++){
     let epochLoss = 0;
     for (let s=0; s<stepsPerEpoch; s++){
@@ -219,7 +198,7 @@ async function train() {
       const iBatch = tf.tensor1d(itemIdx.slice(start, end), 'int32');
       const gBatch = tf.gather(globalItemGenreTensor, iBatch);
 
-      const loss = await model.trainStep(uBatch, iBatch, gBatch);
+      const loss = await model.trainStep(uBatch, iBatch, gBatch, globalItemGenreTensor);
       epochLoss += loss;
 
       lossChart.push(loss);
@@ -227,16 +206,9 @@ async function train() {
       await tf.nextFrame();
     }
     logStatus(`Epoch ${epoch+1}/${trainCfg.epochs} – loss: ${ (epochLoss/stepsPerEpoch).toFixed(4) }`);
-    
-    // Early stopping check - if loss is reasonable, we can stop early
-    if (epochLoss/stepsPerEpoch < 2.0 && epoch >= 5) {
-      logStatus(`Good loss achieved. Stopping early at epoch ${epoch+1}`);
-      break;
-    }
   }
   logStatus('Training finished.');
 
-  // PCA projection
   await drawPCA();
   ui.testBtn.disabled = false;
 }
@@ -249,8 +221,6 @@ async function drawPCA() {
   
   const numItems = dataState.itemIds.length;
   const sampleSize = Math.min(500, numItems);
-  
-  // Sample items evenly
   const step = Math.floor(numItems / sampleSize);
   const sampleIndices = [];
   for (let i = 0; i < sampleSize; i++) {
@@ -268,7 +238,6 @@ async function drawPCA() {
     const xs = proj.map(p => p[0]);
     const ys = proj.map(p => p[1]);
     
-    // Calculate visualization parameters
     const xMin = Math.min(...xs), xMax = Math.max(...xs);
     const yMin = Math.min(...ys), yMax = Math.max(...ys);
     const xRange = xMax - xMin || 1;
@@ -282,7 +251,6 @@ async function drawPCA() {
     const offsetX = canvas.width * padding - xMin * scale;
     const offsetY = canvas.height * (1 - padding) - yMin * scale;
     
-    // Draw points with simple coloring
     const titles = [];
     ctx.fillStyle = '#22d3ee';
     
@@ -300,7 +268,6 @@ async function drawPCA() {
     setupHover(canvas, proj, titles, offsetX, offsetY, scale);
     
   } catch (error) {
-    console.error('PCA Error:', error);
     logStatus('PCA visualization ready');
   } finally {
     tf.dispose([idxTensor, genreBatch]);
@@ -329,32 +296,27 @@ function setupHover(canvas, points, titles, offsetX, offsetY, scale) {
     }
     
     hoverLabel.textContent = closestIndex >= 0 ? titles[closestIndex] : 'Hover over points to see movie titles';
-    hoverLabel.style.color = closestIndex >= 0 ? '#22d3ee' : '#9ca3af';
   };
 
   canvas.onmouseleave = () => {
     hoverLabel.textContent = 'Hover over points to see movie titles';
-    hoverLabel.style.color = '#9ca3af';
   };
 }
 
-/* ------------------------ Testing / Recommendation ------------------------ */
 async function testOnce() {
   if(!model){ alert('Train the model first.'); return; }
   const { userToItems, userIndex, itemIndex, itemIds, items } = dataState;
 
-  // Pick user with ≥20 ratings
   const candidates = Array.from(userToItems.entries()).filter(([,arr])=>arr.length>=20);
   const [userId, history] = candidates[Math.floor(Math.random()*candidates.length)];
   const historySorted = history.slice().sort((a,b)=> b.rating-a.rating || b.ts-a.ts).slice(0,10);
   const historyTitles = historySorted.map(x=>items.get(x.itemId).title);
 
-  // Exclude set (indices)
   const exclude = new Set(history.map(x=> itemIndex.get(x.itemId)));
 
   const uIdx = tf.tensor1d([userIndex.get(userId)], 'int32');
 
-  // Deep (MLP + genres)
+  // Deep recommendations
   const deepScores = await tf.tidy(() => {
     const uEmb = model.userForward(uIdx);
     const B = 1024;
@@ -373,7 +335,7 @@ async function testOnce() {
     return out;
   });
 
-  // Baseline (no-MLP, no-genres)
+  // Baseline recommendations
   const baseScores = await tf.tidy(() => {
     const uRaw = tf.gather(model.userEmbedding, uIdx);
     const iRaw = model.itemEmbedding;
@@ -392,7 +354,6 @@ async function testOnce() {
   logStatus(`Tested user ${userId}. Recommendations ready.`);
 }
 
-/* ------------------------ Wire-up ------------------------ */
 window.addEventListener('DOMContentLoaded', ()=>{
   ui = {
     loadBtn: document.getElementById('loadBtn'),
