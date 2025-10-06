@@ -59,6 +59,23 @@ class TwoTowerModel {
     });
   }
 
+  /* ------------------- PCA-specific method (without strong normalization) ------------------- */
+  itemForwardForPCA(itemIdxTensor, genreTensor) {
+    return tf.tidy(() => {
+      const itemEmb = tf.gather(this.itemEmbedding, itemIdxTensor);
+      const genreEmb = tf.matMul(genreTensor, this.genreWeights);
+      const combined = tf.add(itemEmb, genreEmb);
+      const h1 = this.itemDense1.apply(combined);
+      const out = this.userDense2.apply(h1);
+      
+      // Apply mild normalization for stability, but not full L2 normalization
+      const square = tf.mul(out, out);
+      const sum = tf.sum(square, -1, true);
+      const norm = tf.sqrt(tf.maximum(sum, 1e-8));
+      return tf.div(out, tf.add(norm, 0.1)); // Mild normalization
+    });
+  }
+
   /* ------------------- Scoring ------------------- */
   score(userEmb, itemEmb) {
     return tf.sum(tf.mul(userEmb, itemEmb), -1);
@@ -104,9 +121,12 @@ class TwoTowerModel {
     return num;
   }
 
-  /* ------------------- PCA-specific method (without normalization) ------------------- */
-  itemForwardForPCA(itemIdxTensor, genreTensor) {
-    return this.itemForward(itemIdxTensor, genreTensor, false); // No normalization for PCA
+  /* ------------------- Inference ------------------- */
+  getUserEmbedding(uIdx) {
+    const t = tf.tensor1d([uIdx], "int32");
+    const out = this.userForward(t);
+    t.dispose();
+    return out;
   }
 }
 
