@@ -1,10 +1,7 @@
 // two-tower.js
 /* ------------------------------------------------------------
    TwoTowerModel (TensorFlow.js)
-   Final Optimized Version — works with all TF.js ≥3.0
-   ✅ Stable normalization
-   ✅ Temperature-scaled softmax loss
-   ✅ Optional BPR loss (ranking)
+   Fixed version with proper PCA support
 ------------------------------------------------------------- */
 
 class TwoTowerModel {
@@ -33,32 +30,32 @@ class TwoTowerModel {
     this.optimizer = tf.train.adam(lr);
   }
 
-  /* ------------------- Normalization ------------------- */
+  /* ------------------- Normalization (only for training) ------------------- */
   _l2Normalize(x) {
     const square = tf.mul(x, x);
     const sum = tf.sum(square, -1, true);
-    const norm = tf.sqrt(tf.maximum(sum, 1e-8)); // avoid divide by zero
+    const norm = tf.sqrt(tf.maximum(sum, 1e-8));
     return tf.div(x, norm);
   }
 
   /* ------------------- Forwards ------------------- */
-  userForward(userIdxTensor) {
+  userForward(userIdxTensor, normalize = true) {
     return tf.tidy(() => {
       const userEmb = tf.gather(this.userEmbedding, userIdxTensor);
       const h1 = this.userDense1.apply(userEmb);
       const out = this.userDense2.apply(h1);
-      return this._l2Normalize(out);
+      return normalize ? this._l2Normalize(out) : out;
     });
   }
 
-  itemForward(itemIdxTensor, genreTensor) {
+  itemForward(itemIdxTensor, genreTensor, normalize = true) {
     return tf.tidy(() => {
       const itemEmb = tf.gather(this.itemEmbedding, itemIdxTensor);
       const genreEmb = tf.matMul(genreTensor, this.genreWeights);
       const combined = tf.add(itemEmb, genreEmb);
       const h1 = this.itemDense1.apply(combined);
       const out = this.itemDense2.apply(h1);
-      return this._l2Normalize(out);
+      return normalize ? this._l2Normalize(out) : out;
     });
   }
 
@@ -67,38 +64,23 @@ class TwoTowerModel {
     return tf.sum(tf.mul(userEmb, itemEmb), -1);
   }
 
-  userRaw(userIdxTensor) {
-    return tf.gather(this.userEmbedding, userIdxTensor);
-  }
-  itemRaw() {
-    return this.itemEmbedding;
-  }
-
   /* ------------------- Training Step ------------------- */
   async trainStep(userIdx, itemIdx, genreBatch) {
     const lossVal = await this.optimizer.minimize(() => {
-      const u = this.userForward(userIdx); // [B,E]
-      const ip = this.itemForward(itemIdx, genreBatch); // [B,E]
+      const u = this.userForward(userIdx); // [B,E] - normalized for training
+      const ip = this.itemForward(itemIdx, genreBatch); // [B,E] - normalized for training
 
-      // ----- OPTION 1: In-batch softmax with temperature scaling -----
       if (!this.useBPR) {
-        // Compute logits (user-item similarity matrix)
-        const logits = tf.matMul(u, ip, false, true).div(Math.sqrt(this.embDim)); // temperature scaling
-
-        // Diagonal = positive pairs
+        // In-batch softmax with temperature scaling
+        const logits = tf.matMul(u, ip, false, true).div(Math.sqrt(this.embDim));
         const labels = tf.oneHot(
           tf.range(0, logits.shape[0], 1, "int32"),
           logits.shape[1]
         );
-
-        // Cross-entropy loss with in-batch negatives
         const loss = tf.losses.softmaxCrossEntropy(labels, logits).mean();
         return loss;
-      }
-
-      // ----- OPTION 2: BPR pairwise loss -----
-      else {
-        // Sample negatives by rolling items within batch
+      } else {
+        // BPR pairwise loss
         const rolled = tf.concat([itemIdx.slice(1), itemIdx.slice(0, 1)], 0);
         const genreNeg = tf.gather(
           genreBatch,
@@ -107,41 +89,24 @@ class TwoTowerModel {
             "int32"
           )
         );
-
-        // Compute forward passes
         const ineg = this.itemForward(rolled, genreNeg);
         const posScore = this.score(u, ip);
         const negScore = this.score(u, ineg);
-
-        // BPR loss = -log σ(pos - neg)
         const x = tf.sub(posScore, negScore);
         const loss = tf.neg(tf.mean(tf.logSigmoid(x)));
         return loss;
       }
     }, true);
 
-    // Return scalar number for chart
     const v = Array.isArray(lossVal) ? lossVal[0] : lossVal;
     const num = (await v.data())[0];
     tf.dispose(lossVal);
     return num;
   }
 
-  /* ------------------- Inference ------------------- */
-  getUserEmbedding(uIdx) {
-    const t = tf.tensor1d([uIdx], "int32");
-    const out = this.userForward(t);
-    t.dispose();
-    return out;
-  }
-
-  scoresAllItemsDeep(userIdxTensor, allGenres) {
-    return tf.tidy(() => {
-      const u = this.userForward(userIdxTensor);
-      const I = this.itemForward(tf.range(0, this.numItems, 1, "int32"), allGenres);
-      const scores = tf.matMul(I, u.transpose()).reshape([this.numItems]);
-      return scores;
-    });
+  /* ------------------- PCA-specific method (without normalization) ------------------- */
+  itemForwardForPCA(itemIdxTensor, genreTensor) {
+    return this.itemForward(itemIdxTensor, genreTensor, false); // No normalization for PCA
   }
 }
 
