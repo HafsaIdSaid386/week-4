@@ -281,4 +281,95 @@ async function drawPCA() {
   for (let k=0;k<points.length;k++){
     const x = norm(xs[k], minX, maxX, canvas.width);
     const y = canvas.height - norm(ys[k], minY, maxY, canvas.height);
-    ctx.beginP
+    ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill();
+    titles.push(dataState.items.get(dataState.itemIds[idxs[k]]).title);
+  }
+  // Hover label
+  canvas.onmousemove = (e)=>{
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX-rect.left)*(canvas.width/rect.width);
+    const my = (e.clientY-rect.top)*(canvas.height/rect.height);
+    let hit = -1;
+    for (let k=0;k<points.length;k++){
+      const x = norm(xs[k], minX, maxX, canvas.width);
+      const y = canvas.height - norm(ys[k], minY, maxY, canvas.height);
+      if ( (x-mx)*(x-mx)+(y-my)*(y-my) < 16) { hit=k; break; }
+    }
+    ui.hoverTitle.textContent = hit>=0 ? titles[hit] : '';
+  };
+
+  tf.dispose([idxTensor, genreBatch, proj]);
+}
+
+/* ------------------------ Testing / Recommendation ------------------------ */
+async function testOnce() {
+  if(!model){ alert('Train the model first.'); return; }
+  const { userToItems, userIndex, itemIndex, itemIds, items } = dataState;
+
+  // Pick user with ≥20 ratings
+  const candidates = Array.from(userToItems.entries()).filter(([,arr])=>arr.length>=20);
+  const [userId, history] = candidates[Math.floor(Math.random()*candidates.length)];
+  const historySorted = history.slice().sort((a,b)=> b.rating-a.rating || b.ts-a.ts).slice(0,10);
+  const historyTitles = historySorted.map(x=>items.get(x.itemId).title);
+
+  // Exclude set (indices)
+  const exclude = new Set(history.map(x=> itemIndex.get(x.itemId)));
+
+  const uIdx = tf.tensor1d([userIndex.get(userId)], 'int32');
+
+  // Deep (MLP + genres)
+  const deepScores = await tf.tidy(() => {
+    const uEmb = model.userForward(uIdx);              // [1, E]
+    // Compute scores vs all items in batches to save memory
+    const B = 1024;
+    const total = itemIds.length;
+    const out = new Float32Array(total);
+    for (let s=0, p=0; s<total; s+=B){
+      const end = Math.min(total, s+B);
+      const idx = tf.tensor1d(new Int32Array(Array.from({length:end-s},(_,k)=>s+k)), 'int32');
+      const g = tf.gather(globalItemGenreTensor, idx);
+      const iEmb = model.itemForward(idx, g);          // [b, E]
+      const logits = tf.matMul(iEmb, uEmb.transpose()).reshape([end-s]); // [b]
+      const arr = logits.dataSync();
+      for(let k=0;k<arr.length;k++) out[p++]=arr[k];
+      tf.dispose([idx,g,iEmb,logits]);
+    }
+    return out;
+  });
+
+  // Baseline (no-MLP, no-genres) — raw embedding dot product
+  const baseScores = await tf.tidy(() => {
+    const uRaw = tf.gather(model.userEmbedding, uIdx);       // [1,E]
+    const iRaw = model.itemEmbedding;                         // [I,E]
+    const logits = tf.matMul(iRaw, uRaw.transpose()).reshape([iRaw.shape[0]]);
+    return logits.dataSync();
+  });
+
+  const k = 10;
+  const deepIdxs = topKIndices(deepScores, k, exclude);
+  const baseIdxs = topKIndices(baseScores, k, exclude);
+
+  const deepTitles = deepIdxs.map(i=>items.get(itemIds[i]).title);
+  const baseTitles = baseIdxs.map(i=>items.get(itemIds[i]).title);
+
+  renderResults(historyTitles, baseTitles, deepTitles);
+  logStatus(`Tested user ${userId}. History vs Baseline vs Deep rendered.`);
+}
+
+/* ------------------------ Wire-up ------------------------ */
+window.addEventListener('DOMContentLoaded', ()=>{
+  ui = {
+    loadBtn: document.getElementById('loadBtn'),
+    trainBtn: document.getElementById('trainBtn'),
+    testBtn: document.getElementById('testBtn'),
+    status: document.getElementById('status'),
+    lossCanvas: document.getElementById('lossCanvas'),
+    pcaCanvas: document.getElementById('pcaCanvas'),
+    results: document.getElementById('results'),
+    countsPill: document.getElementById('countsPill'),
+    hoverTitle: document.getElementById('hoverTitle')
+  };
+  ui.loadBtn.onclick = ()=> loadData().catch(e=>logStatus('Error: '+e.message));
+  ui.trainBtn.onclick = ()=> train().catch(e=>logStatus('Error: '+e.message));
+  ui.testBtn.onclick = ()=> testOnce().catch(e=>logStatus('Error: '+e.message));
+});
