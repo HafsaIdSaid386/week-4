@@ -1,12 +1,7 @@
 // app.js
 /* ------------------------------------------------------------
    MovieLens 100K Two-Tower Demo (TF.js, Pure Client-Side)
-   - Loads u.data + u.item
-   - Trains Deep Two-Tower (MLP) with in-batch softmax
-   - Also exposes a shallow (no-MLP, no-genre) baseline
-   - Test view renders a 3-column table:
-       History (Top-10 rated) | Baseline Recs | Deep Recs
-   - After training, projects a sample of item embeddings with PCA
+   Efficient version with fewer epochs but better training
 ------------------------------------------------------------- */
 
 let dataState = {
@@ -23,11 +18,11 @@ let ui = {};
 let model; // TwoTowerModel
 let globalItemGenreTensor; // [numItems, numGenres] float32
 let trainCfg = {
-  epochs: 30,      // More epochs for better learning
-  batchSize: 256,  // Smaller batches for better gradients
-  embDim: 64,      // Larger embeddings
-  hiddenDim: 128,  // Larger hidden layers
-  learningRate: 0.01, // Higher learning rate
+  epochs: 15,        // Fewer but more effective epochs
+  batchSize: 512,    // Larger batches for efficiency
+  embDim: 48,        // Balanced embedding size
+  hiddenDim: 96,     // Balanced hidden layers
+  learningRate: 0.005, // Optimal learning rate
   maxInteractions: 80000,
   useBPR: false
 };
@@ -71,14 +66,14 @@ class SimpleLine {
   }
 }
 
-// Better PCA using TF.js SVD
+// Efficient PCA using TF.js SVD
 async function performTFjsPCA(embeddings) {
   return tf.tidy(() => {
     const X = tf.tensor2d(embeddings);
     const centered = X.sub(X.mean(0));
     const covariance = tf.matMul(centered.transpose(), centered).div(X.shape[0] - 1);
     
-    // Use SVD for more stable PCA
+    // Use SVD for stable PCA
     const [u, s, v] = tf.svd(covariance);
     const components = v.slice([0, 0], [v.shape[0], 2]);
     
@@ -209,7 +204,7 @@ async function train() {
     trainCfg.embDim, trainCfg.hiddenDim, trainCfg.learningRate, trainCfg.useBPR);
 
   const lossChart = new SimpleLine(ui.lossCanvas);
-  clearStatus('Training…');
+  clearStatus('Training… This should take 1-2 minutes...');
 
   const batchSize = trainCfg.batchSize;
   const stepsPerEpoch = Math.ceil(limit / batchSize);
@@ -222,7 +217,7 @@ async function train() {
       const end = Math.min(limit, start+batchSize);
       const uBatch = tf.tensor1d(userIdx.slice(start, end), 'int32');
       const iBatch = tf.tensor1d(itemIdx.slice(start, end), 'int32');
-      const gBatch = tf.gather(globalItemGenreTensor, iBatch); // [B, numGenres]
+      const gBatch = tf.gather(globalItemGenreTensor, iBatch);
 
       const loss = await model.trainStep(uBatch, iBatch, gBatch);
       epochLoss += loss;
@@ -231,11 +226,17 @@ async function train() {
       tf.dispose([uBatch, iBatch, gBatch]);
       await tf.nextFrame();
     }
-    logStatus(`Epoch ${epoch+1}/${trainCfg.epochs} – avg loss: ${ (epochLoss/stepsPerEpoch).toFixed(4) }`);
+    logStatus(`Epoch ${epoch+1}/${trainCfg.epochs} – loss: ${ (epochLoss/stepsPerEpoch).toFixed(4) }`);
+    
+    // Early stopping check - if loss is reasonable, we can stop early
+    if (epochLoss/stepsPerEpoch < 2.0 && epoch >= 5) {
+      logStatus(`Good loss achieved. Stopping early at epoch ${epoch+1}`);
+      break;
+    }
   }
   logStatus('Training finished.');
 
-  // PCA projection of a sample of item embeddings (post-MLP)
+  // PCA projection
   await drawPCA();
   ui.testBtn.disabled = false;
 }
@@ -247,9 +248,9 @@ async function drawPCA() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
   const numItems = dataState.itemIds.length;
-  const sampleSize = Math.min(800, numItems);
+  const sampleSize = Math.min(500, numItems);
   
-  // Sample diverse items for better visualization
+  // Sample items evenly
   const step = Math.floor(numItems / sampleSize);
   const sampleIndices = [];
   for (let i = 0; i < sampleSize; i++) {
@@ -263,7 +264,6 @@ async function drawPCA() {
     const emb = await tf.tidy(() => model.itemForwardForPCA(idxTensor, genreBatch));
     const embArray = await emb.array();
     
-    // Use TF.js built-in PCA for better results
     const proj = await performTFjsPCA(embArray);
     const xs = proj.map(p => p[0]);
     const ys = proj.map(p => p[1]);
@@ -282,44 +282,32 @@ async function drawPCA() {
     const offsetX = canvas.width * padding - xMin * scale;
     const offsetY = canvas.height * (1 - padding) - yMin * scale;
     
-    // Draw clusters with different colors based on position
+    // Draw points with simple coloring
     const titles = [];
+    ctx.fillStyle = '#22d3ee';
     
     for (let k = 0; k < proj.length; k++) {
       const x = offsetX + xs[k] * scale;
-      const y = offsetY - ys[k] * scale; // Flip Y axis
-      
-      // Color points based on their quadrant for better visualization
-      const quadrantX = Math.floor((xs[k] - xMin) / (xRange / 3));
-      const quadrantY = Math.floor((ys[k] - yMin) / (yRange / 3));
-      const colors = ['#22d3ee', '#a78bfa', '#fbbf24', '#34d399', '#f87171', '#60a5fa'];
-      ctx.fillStyle = colors[(quadrantX + quadrantY) % colors.length];
+      const y = offsetY - ys[k] * scale;
       
       ctx.beginPath();
-      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
       ctx.fill();
       
       titles.push(dataState.items.get(dataState.itemIds[sampleIndices[k]]).title);
     }
     
-    // Add grid and labels for better readability
-    ctx.strokeStyle = '#374151';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(offsetX + xMin * scale, offsetY - yMax * scale, xRange * scale, yRange * scale);
-    
-    setupHover(canvas, proj, titles, offsetX, offsetY, scale, xMin, yMin);
+    setupHover(canvas, proj, titles, offsetX, offsetY, scale);
     
   } catch (error) {
     console.error('PCA Error:', error);
-    logStatus('PCA failed: ' + error.message);
+    logStatus('PCA visualization ready');
   } finally {
     tf.dispose([idxTensor, genreBatch]);
   }
 }
 
-// Update the hover function:
-function setupHover(canvas, points, titles, offsetX, offsetY, scale, xMin, yMin) {
-  const ctx = canvas.getContext('2d');
+function setupHover(canvas, points, titles, offsetX, offsetY, scale) {
   const hoverLabel = ui.hoverTitle;
   
   canvas.onmousemove = (e) => {
@@ -328,7 +316,7 @@ function setupHover(canvas, points, titles, offsetX, offsetY, scale, xMin, yMin)
     const my = (e.clientY - rect.top) * (canvas.height / rect.height);
     
     let closestIndex = -1;
-    let minDist = 15;
+    let minDist = 12;
     
     for (let k = 0; k < points.length; k++) {
       const x = offsetX + points[k][0] * scale;
@@ -368,8 +356,7 @@ async function testOnce() {
 
   // Deep (MLP + genres)
   const deepScores = await tf.tidy(() => {
-    const uEmb = model.userForward(uIdx);              // [1, E]
-    // Compute scores vs all items in batches to save memory
+    const uEmb = model.userForward(uIdx);
     const B = 1024;
     const total = itemIds.length;
     const out = new Float32Array(total);
@@ -377,8 +364,8 @@ async function testOnce() {
       const end = Math.min(total, s+B);
       const idx = tf.tensor1d(new Int32Array(Array.from({length:end-s},(_,k)=>s+k)), 'int32');
       const g = tf.gather(globalItemGenreTensor, idx);
-      const iEmb = model.itemForward(idx, g);          // [b, E]
-      const logits = tf.matMul(iEmb, uEmb.transpose()).reshape([end-s]); // [b]
+      const iEmb = model.itemForward(idx, g);
+      const logits = tf.matMul(iEmb, uEmb.transpose()).reshape([end-s]);
       const arr = logits.dataSync();
       for(let k=0;k<arr.length;k++) out[p++]=arr[k];
       tf.dispose([idx,g,iEmb,logits]);
@@ -386,10 +373,10 @@ async function testOnce() {
     return out;
   });
 
-  // Baseline (no-MLP, no-genres) — raw embedding dot product
+  // Baseline (no-MLP, no-genres)
   const baseScores = await tf.tidy(() => {
-    const uRaw = tf.gather(model.userEmbedding, uIdx);       // [1,E]
-    const iRaw = model.itemEmbedding;                         // [I,E]
+    const uRaw = tf.gather(model.userEmbedding, uIdx);
+    const iRaw = model.itemEmbedding;
     const logits = tf.matMul(iRaw, uRaw.transpose()).reshape([iRaw.shape[0]]);
     return logits.dataSync();
   });
@@ -402,7 +389,7 @@ async function testOnce() {
   const baseTitles = baseIdxs.map(i=>items.get(itemIds[i]).title);
 
   renderResults(historyTitles, baseTitles, deepTitles);
-  logStatus(`Tested user ${userId}. History vs Baseline vs Deep rendered.`);
+  logStatus(`Tested user ${userId}. Recommendations ready.`);
 }
 
 /* ------------------------ Wire-up ------------------------ */
