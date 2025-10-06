@@ -3,83 +3,90 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Two-Tower Movie Recommender (TF.js • MovieLens 100K)</title>
+  <title>Two-Tower Movie Recommender (TF.js, MovieLens 100K)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root { --bg:#0f172a; --card:#111827; --muted:#94a3b8; --text:#e5e7eb; --accent:#60a5fa; }
+    :root { --bg:#0f172a; --panel:#111827; --ink:#e5e7eb; --muted:#9ca3af; --accent:#22d3ee; }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-           background: linear-gradient(180deg, var(--bg), #0b1220 60%); color: var(--text); }
-    header { padding: 20px 16px 8px; text-align: center; }
-    header h1 { margin: 6px 0 4px; font-weight: 700; letter-spacing: .2px; }
-    header p { margin: 0; color: var(--muted); font-size: 14px; }
-    main { max-width: 1100px; margin: 18px auto 60px; padding: 0 16px; }
-    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    button {
-      background: #1f2937; color: #fff; border: 1px solid #334155; padding: 10px 14px; border-radius: 12px;
-      cursor: pointer; font-weight: 600; transition: transform .02s ease-in, background .2s;
+    body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+          background:linear-gradient(180deg, #0b1023, #0b122e 60%, #0b1023); color:var(--ink);}
+    header{ padding:18px 20px; border-bottom:1px solid #1f2937; position:sticky; top:0; backdrop-filter:saturate(120%) blur(6px);}
+    h1{ margin:0; font-size:20px; letter-spacing:.2px; }
+    main{ max-width:1100px; margin:28px auto; padding:0 16px 80px; }
+    .grid{ display:grid; grid-template-columns: 1fr; gap:16px; }
+    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    button{
+      background:#0ea5e9; color:#001018; border:0; padding:10px 14px; border-radius:12px; font-weight:700;
+      box-shadow: 0 6px 18px rgba(34,211,238,.2); cursor:pointer; transition:.2s transform;
     }
-    button:hover { background: #243244; }
-    button:active { transform: translateY(1px); }
-    .status { margin-top: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; color: #cbd5e1; }
-    .grid { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .card { background: var(--card); border: 1px solid #1f2937; border-radius: 16px; padding: 14px; }
-    .card h3 { margin: 0 0 10px; font-size: 16px; color: #cbd5e1; }
-    canvas { width: 100%; height: 260px; background: #0b1220; border-radius: 12px; border: 1px solid #1f2937; }
-    #results { margin-top: 16px; }
-    table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 12px; }
-    th, td { padding: 10px 12px; border-bottom: 1px solid #223049; text-align: left; }
-    th { background: #0b1220; color: #cbd5e1; font-weight: 700; }
-    tr:hover td { background: rgba(96,165,250,.06); }
-    .tips { margin-top: 16px; color: #9ca3af; font-size: 13px; line-height: 1.35; }
-    code { background: #0b1220; padding: 2px 6px; border-radius: 6px; border: 1px solid #1f2937; color: #cbd5e1; }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    button:hover{ transform: translateY(-1px); }
+    button:disabled{ opacity:.5; cursor:not-allowed; }
+    .card{
+      background:rgba(255,255,255,.03); border:1px solid #1f2937; border-radius:16px; padding:14px;
+    }
+    .label{ font-size:12px; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:.08em; }
+    #status{ white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height:1.35; }
+    canvas{ width:100%; height:260px; background:#0b1229; border-radius:12px; border:1px solid #1f2937; }
+    #results table{ width:100%; border-collapse:collapse; }
+    #results th, #results td{ border:1px solid #1f2937; padding:8px 10px; vertical-align:top; }
+    #results th{ background:#0a1226; text-align:left; color:#a5f3fc; }
+    #tips{ color:var(--muted); font-size:13px; }
+    a { color:#7dd3fc; }
+    .pill{ display:inline-block; background:#0b2236; border:1px solid #1f2937; padding:2px 8px; border-radius:999px; font-size:12px; color:#93c5fd;}
   </style>
 </head>
 <body>
   <header>
-    <h1>Two-Tower Movie Recommender (TensorFlow.js)</h1>
-    <p>Pure client-side demo trained in your browser on MovieLens 100K.</p>
+    <h1>🎬 Two-Tower Retrieval Demo (TensorFlow.js + MovieLens 100K)</h1>
   </header>
 
   <main>
-    <div class="toolbar">
-      <button id="btnLoad">📥 Load Data</button>
-      <button id="btnTrain" disabled>🏋️ Train</button>
-      <button id="btnTest" disabled>🧪 Test</button>
-
-      <span class="status" id="status">Status: waiting…</span>
+    <div class="row">
+      <button id="loadBtn">Load Data</button>
+      <button id="trainBtn" disabled>Train</button>
+      <button id="testBtn" disabled>Test</button>
+      <span class="pill" id="countsPill">users: –, items: –, interactions: –</span>
     </div>
 
     <div class="grid">
       <div class="card">
-        <h3>Training Loss (live)</h3>
-        <canvas id="lossCanvas" width="520" height="260"></canvas>
+        <div class="label">Status</div>
+        <div id="status">Ready. Place dataset files under <code>/data/u.data</code> and <code>/data/u.item</code>.</div>
       </div>
+
       <div class="card">
-        <h3>Item Embeddings Projection (PCA, sample)</h3>
-        <canvas id="projCanvas" width="520" height="260" title="Scatter of a sample of item embeddings"></canvas>
+        <div class="label">Training Loss</div>
+        <canvas id="lossCanvas" width="1024" height="260"></canvas>
       </div>
-    </div>
 
-    <div id="results" class="card"></div>
+      <div class="card">
+        <div class="label">Item Embeddings Projection (PCA, sample)</div>
+        <canvas id="pcaCanvas" width="1024" height="260"></canvas>
+        <div id="hoverTitle" class="label" style="margin-top:8px;"></div>
+      </div>
 
-    <div class="tips card">
-      <h3 style="margin-top:0">Tips</h3>
-      <ul style="margin:8px 0 0 18px">
-        <li>Put <code>u.data</code> and <code>u.item</code> under <code>/data/</code>. This page will fetch them with relative paths.</li>
-        <li>Training 3–5 epochs with embedding dim 32 and ~80k interactions usually takes 30–120 seconds depending on your device.</li>
-        <li>To host on GitHub Pages: create a repo with this <code>index.html</code>, <code>app.js</code>, <code>two-tower.js</code>, and a <code>data/</code> folder; then enable Pages from the repo settings.</li>
-      </ul>
+      <div class="card">
+        <div class="label">Top-10: History vs Baseline (No-MLP) vs Deep (MLP)</div>
+        <div id="results"></div>
+      </div>
+
+      <div class="card" id="tips">
+        <div class="label">Tips</div>
+        <ul>
+          <li>First click <b>Load Data</b> (parses <code>data/u.data</code> &amp; <code>data/u.item</code> locally in your browser).</li>
+          <li>Then click <b>Train</b>. With default settings (≤80k interactions, 10 epochs, 32-dim embeddings) training usually completes within a few minutes depending on your device.</li>
+          <li>Click <b>Test</b> to sample a random user (≥20 ratings) and compare history vs recommendations.</li>
+          <li>This app is 100% client-side and works on static hosting (e.g., GitHub Pages). Put all four files at repo root and the dataset under <code>/data/</code>.</li>
+        </ul>
+      </div>
     </div>
   </main>
 
-  <!-- TensorFlow.js from CDN -->
+  <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 
-  <!-- App logic and model -->
-  <script src="two-tower.js"></script>
-  <script src="app.js"></script>
+  <!-- App scripts -->
+  <script src="./two-tower.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
