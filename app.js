@@ -18,11 +18,11 @@ let ui = {};
 let model; // TwoTowerModel
 let globalItemGenreTensor; // [numItems, numGenres] float32
 let trainCfg = {
-  epochs: 15,        // Fewer but more effective epochs
-  batchSize: 512,    // Larger batches for efficiency
-  embDim: 48,        // Balanced embedding size
-  hiddenDim: 96,     // Balanced hidden layers
-  learningRate: 0.005, // Optimal learning rate
+  epochs: 20,        // Fewer but more effective epochs
+  batchSize: 256,    // Larger batches for efficiency
+  embDim: 32,        // Balanced embedding size
+  hiddenDim: 64,     // Balanced hidden layers
+  learningRate: 0.001, // Optimal learning rate
   maxInteractions: 80000,
   useBPR: false
 };
