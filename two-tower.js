@@ -42,7 +42,9 @@ class TwoTowerModel {
       const userEmb = tf.gather(this.userEmbedding, userIdxTensor); // [B,E]
       const h1 = this.userDense1.apply(userEmb);
       const out = this.userDense2.apply(h1);
-      return tf.linalg.l2Normalize(out, -1);
+      // Replace tf.linalg.l2Normalize with manual normalization
+      const normed = tf.div(out, tf.norm(out, 'euclidean', -1, true));
+      return normed;
     });
   }
 
@@ -54,7 +56,9 @@ class TwoTowerModel {
       const combined = tf.add(itemEmb, genreEmb);                   // fuse ID + content
       const h1 = this.itemDense1.apply(combined);
       const out = this.itemDense2.apply(h1);
-      return tf.linalg.l2Normalize(out, -1);
+      // Replace tf.linalg.l2Normalize with manual normalization
+      const normed = tf.div(out, tf.norm(out, 'euclidean', -1, true));
+      return normed;
     });
   }
 
