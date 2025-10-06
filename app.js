@@ -111,7 +111,7 @@ function topKIndices(scores, k, excludeSet) {
     if(excludeSet && excludeSet.has(i)) continue;
     const val = arr[i];
     if(heap.length<k){ heap.push([val,i]); heap.sort((a,b)=>a[0]-b[0]); }
-    else if(val>heap[0][0]){ heap[0]=[val,i]; heap.sort((a,b)=>a[0]-b[0]); }
+    else if(val>heap[0][0]){ heap[0]=[val,i]; heap.sort((a,b)=>a[0]-a[0]); }
   }
   return heap.sort((a,b)=>b[0]-a[0]).map(x=>x[1]);
 }
@@ -266,34 +266,55 @@ async function drawPCA() {
   const idxTensor = tf.tensor1d(new Int32Array(idxs), 'int32');
   const genreBatch = tf.gather(globalItemGenreTensor, idxTensor);
 
-  const emb = await tf.tidy(() => model.itemForward(idxTensor, genreBatch).array());
+  // Use PCA-specific forward pass without normalization
+  const emb = await tf.tidy(() => model.itemForwardForPCA(idxTensor, genreBatch).array());
   const proj = await pca2D(tf.tensor2d(emb));
   const points = await proj.array();
   const xs = points.map(p=>p[0]), ys = points.map(p=>p[1]);
-  const minX = Math.min(...xs), maxX=Math.max(...xs);
-  const minY = Math.min(...ys), maxY=Math.max(...ys);
+  
+  // Better normalization for visualization
+  const rangeX = Math.max(...xs) - Math.min(...xs);
+  const rangeY = Math.max(...ys) - Math.min(...ys);
+  const padding = 0.1;
+  
+  const minX = Math.min(...xs) - rangeX * padding;
+  const maxX = Math.max(...xs) + rangeX * padding;
+  const minY = Math.min(...ys) - rangeY * padding;
+  const maxY = Math.max(...ys) + rangeY * padding;
+  
   const norm = (v, a, b, w) => ( (v-a)/(b-a) ) * w;
 
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle = '#0b1229'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = '#0b1229'; 
+  ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.fillStyle = '#93c5fd88';
+  
   const titles = [];
   for (let k=0;k<points.length;k++){
     const x = norm(xs[k], minX, maxX, canvas.width);
     const y = canvas.height - norm(ys[k], minY, maxY, canvas.height);
-    ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); 
+    ctx.arc(x,y,2.5,0,Math.PI*2); 
+    ctx.fill();
     titles.push(dataState.items.get(dataState.itemIds[idxs[k]]).title);
   }
+  
   // Hover label
   canvas.onmousemove = (e)=>{
     const rect = canvas.getBoundingClientRect();
     const mx = (e.clientX-rect.left)*(canvas.width/rect.width);
     const my = (e.clientY-rect.top)*(canvas.height/rect.height);
     let hit = -1;
+    let minDist = 25; // Increased hover radius
+    
     for (let k=0;k<points.length;k++){
       const x = norm(xs[k], minX, maxX, canvas.width);
       const y = canvas.height - norm(ys[k], minY, maxY, canvas.height);
-      if ( (x-mx)*(x-mx)+(y-my)*(y-my) < 16) { hit=k; break; }
+      const dist = (x-mx)*(x-mx) + (y-my)*(y-my);
+      if (dist < minDist) { 
+        hit = k; 
+        minDist = dist;
+      }
     }
     ui.hoverTitle.textContent = hit>=0 ? titles[hit] : '';
   };
